@@ -426,7 +426,6 @@ function calculateSiswaKas(siswaId) {
 }
 
 function renderDashboard() {
-    // Tampilkan info periode aktif
     const periodeStart = getPeriodeStart();
     const periodeEnd = getPeriodeEnd();
     const periodeLabel = appData.settings.periode || 'Mingguan';
@@ -438,7 +437,7 @@ function renderDashboard() {
         infoPeriodeEl.style.cssText = 'background: var(--card-bg); border: 1px solid var(--border-color); padding: 10px 15px; border-radius: 8px; margin-bottom: 15px; font-size: 0.9rem;';
         document.getElementById('page-dashboard').insertBefore(infoPeriodeEl, document.getElementById('dashboard-cards'));
     }
-    infoPeriodeEl.innerHTML = `📅 <b>Periode Aktif (${periodeLabel}):</b> ${formatTanggalIndo(periodeStart)} — ${formatTanggalIndo(periodeEnd)}`;
+    infoPeriodeEl.innerHTML = `<b>Periode Aktif (${periodeLabel}):</b> ${formatTanggalIndo(periodeStart)} — ${formatTanggalIndo(periodeEnd)}`;
 
     const cardsContainer = document.getElementById('dashboard-cards');
     const { totalPemasukan, totalPengeluaran, saldo } = calculateTotals();
