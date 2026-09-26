@@ -29,7 +29,6 @@ async function initApp() {
 }
 
 async function loadData() {
-    
     const { data: users } = await supabaseClient.from('users').select('*');
     if (users) appData.users = users;
 
@@ -37,18 +36,22 @@ async function loadData() {
     if (siswa) appData.siswa = siswa;
 
     const { data: transaksi } = await supabaseClient.from('transaksi').select('*');
-    if (transaksi) appData.transaksi = transaksi;
+    if (transaksi) {
+        appData.transaksi = transaksi.map(t => ({
+            ...t,
+            siswaId: Number(t.siswa_id), 
+            nominal: Number(t.nominal) || 0 
+        }));
+    }
 
     const { data: settings } = await supabaseClient.from('settings').select('*').single();
-    if (settings) appData.settings = settings;
-
-if (settings) {
-    appData.settings = {
-        nominalKas: Number(settings.nominal_kas) || 0,
-        periode: settings.periode || 'Mingguan',
-        theme: settings.theme || 'light'
-    };
-}
+    if (settings) {
+        appData.settings = {
+            nominalKas: Number(settings.nominal_kas) || 0,
+            periode: settings.periode || 'Mingguan',
+            theme: settings.theme || 'light'
+        };
+    }
 
     const storedActive = localStorage.getItem('kas_active_user');
     if (storedActive) appData.activeUser = JSON.parse(storedActive);
@@ -324,6 +327,61 @@ function formatRupiah(amount) {
     return 'Rp' + value.toLocaleString('id-ID');
 }
 
+function getPeriodeStart() {
+    const now = new Date();
+    const periode = appData.settings.periode || 'Mingguan';
+    let start;
+
+    if (periode === 'Harian') {
+        start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    } else if (periode === 'Mingguan') {
+        const day = now.getDay(); 
+        const diff = day === 0 ? 6 : day - 1;
+        start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - diff);
+    } else if (periode === 'Bulanan') {
+        start = new Date(now.getFullYear(), now.getMonth(), 1);
+    } else {
+        return '2000-01-01';
+    }
+
+    const y = start.getFullYear();
+    const m = String(start.getMonth() + 1).padStart(2, '0');
+    const d = String(start.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
+
+function getPeriodeEnd() {
+    const now = new Date();
+    const periode = appData.settings.periode || 'Mingguan';
+    let end;
+
+    if (periode === 'Harian') {
+        end = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    } else if (periode === 'Mingguan') {
+        const day = now.getDay();
+        const diff = day === 0 ? 0 : 7 - day; 
+        end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diff);
+    } else if (periode === 'Bulanan') {
+        end = new Date(now.getFullYear(), now.getMonth() + 1, 0); 
+    } else {
+        return '2099-12-31';
+    }
+
+    const y = end.getFullYear();
+    const m = String(end.getMonth() + 1).padStart(2, '0');
+    const d = String(end.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
+
+function formatTanggalIndo(dateStr) {
+    if (!dateStr) return '-';
+    const bulan = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 
+                    'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    const [y, m, d] = dateStr.split('-');
+    return `${parseInt(d)} ${bulan[parseInt(m) - 1]} ${y}`;
+}
+
+
 function calculateTotals() {
     let totalPemasukan = 0;
     let totalPengeluaran = 0;
@@ -339,17 +397,21 @@ function calculateTotals() {
 }
 
 function calculateSiswaKas(siswaId) {
+    const periodeStart = getPeriodeStart();
+    const periodeEnd = getPeriodeEnd();
     let totalDibayar = 0;
+
     appData.transaksi.forEach(t => {
-        if (t.type === 'Pemasukan' && t.siswaId == siswaId) {
-            // Konversi nominal ke Number sebelum dijumlahkan
-            totalDibayar += Number(t.nominal) || 0;
+        if (t.type === 'Pemasukan' && Number(t.siswaId) === Number(siswaId)) {
+            if (t.tanggal >= periodeStart && t.tanggal <= periodeEnd) {
+                totalDibayar += Number(t.nominal) || 0;
+            }
         }
     });
 
     const totalTagihan = Number(appData.settings.nominalKas) || 0;
     const tunggakan = Math.max(0, totalTagihan - totalDibayar);
-    
+
     let status = 'Belum Bayar';
     if (totalDibayar >= totalTagihan && totalTagihan > 0) {
         status = 'Sudah Bayar';
@@ -364,6 +426,20 @@ function calculateSiswaKas(siswaId) {
 }
 
 function renderDashboard() {
+    // Tampilkan info periode aktif
+    const periodeStart = getPeriodeStart();
+    const periodeEnd = getPeriodeEnd();
+    const periodeLabel = appData.settings.periode || 'Mingguan';
+    
+    let infoPeriodeEl = document.getElementById('info-periode-aktif');
+    if (!infoPeriodeEl) {
+        infoPeriodeEl = document.createElement('div');
+        infoPeriodeEl.id = 'info-periode-aktif';
+        infoPeriodeEl.style.cssText = 'background: var(--card-bg); border: 1px solid var(--border-color); padding: 10px 15px; border-radius: 8px; margin-bottom: 15px; font-size: 0.9rem;';
+        document.getElementById('page-dashboard').insertBefore(infoPeriodeEl, document.getElementById('dashboard-cards'));
+    }
+    infoPeriodeEl.innerHTML = `📅 <b>Periode Aktif (${periodeLabel}):</b> ${formatTanggalIndo(periodeStart)} — ${formatTanggalIndo(periodeEnd)}`;
+
     const cardsContainer = document.getElementById('dashboard-cards');
     const { totalPemasukan, totalPengeluaran, saldo } = calculateTotals();
     
@@ -546,12 +622,13 @@ document.getElementById('form-pembayaran').addEventListener('submit', async func
 
     const siswa = appData.siswa.find(s => s.id == siswaId);
     if (!siswa || !nominal || nominal <= 0) return;
+
     const { data, error } = await supabaseClient
         .from('transaksi')
         .insert([{
             type: 'Pemasukan',
             kategori: 'Pembayaran Kas',
-            siswa_id: Number(siswa.id),
+            siswa_id: Number(siswa.id), 
             sumber: siswa.fullname,
             nominal: nominal,
             tanggal: tanggal,
@@ -562,7 +639,13 @@ document.getElementById('form-pembayaran').addEventListener('submit', async func
 
     if (error) { alert('Gagal menyimpan pembayaran: ' + error.message); return; }
 
-    appData.transaksi.push(data[0]);
+    const newTx = {
+        ...data[0],
+        siswaId: Number(data[0].siswa_id),
+        nominal: Number(data[0].nominal)
+    };
+    appData.transaksi.push(newTx);
+
     closeModal('modal-pembayaran');
     renderKas();
     alert('Pembayaran berhasil dicatat!');
@@ -957,12 +1040,18 @@ function setupRealtime() {
             async (payload) => {
                 console.log('Transaksi berubah:', payload);
                 const { data } = await supabaseClient.from('transaksi').select('*');
-                if (data) appData.transaksi = data;
+                if (data) {
+                    appData.transaksi = data.map(t => ({
+                        ...t,
+                        siswaId: Number(t.siswa_id),
+                        nominal: Number(t.nominal) || 0
+                    }));
+                }
                 refreshCurrentPage();
             }
         )
-
         .subscribe();
+
     supabaseClient
         .channel('siswa-changes')
         .on('postgres_changes', 
@@ -983,7 +1072,13 @@ function setupRealtime() {
             async (payload) => {
                 console.log('Settings berubah:', payload);
                 const { data } = await supabaseClient.from('settings').select('*').single();
-                if (data) appData.settings = data;
+                if (data) {
+                    appData.settings = {
+                        nominalKas: Number(data.nominal_kas) || 0,
+                        periode: data.periode || 'Mingguan',
+                        theme: data.theme || 'light'
+                    };
+                }
                 refreshCurrentPage();
             }
         )
