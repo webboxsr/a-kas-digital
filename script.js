@@ -42,6 +42,14 @@ async function loadData() {
     const { data: settings } = await supabaseClient.from('settings').select('*').single();
     if (settings) appData.settings = settings;
 
+if (settings) {
+    appData.settings = {
+        nominalKas: Number(settings.nominal_kas) || 0,
+        periode: settings.periode || 'Mingguan',
+        theme: settings.theme || 'light'
+    };
+}
+
     const storedActive = localStorage.getItem('kas_active_user');
     if (storedActive) appData.activeUser = JSON.parse(storedActive);
 }
@@ -311,7 +319,9 @@ function refreshPageData(pageId) {
 }
 
 function formatRupiah(amount) {
-    return 'Rp' + Number(amount).toLocaleString('id-ID');
+    const value = Number(amount);
+    if (isNaN(value) || !isFinite(value)) return 'Rp0';
+    return 'Rp' + value.toLocaleString('id-ID');
 }
 
 function calculateTotals() {
@@ -319,8 +329,9 @@ function calculateTotals() {
     let totalPengeluaran = 0;
 
     appData.transaksi.forEach(t => {
-        if (t.type === 'Pemasukan') totalPemasukan += Number(t.nominal);
-        if (t.type === 'Pengeluaran') totalPengeluaran += Number(t.nominal);
+        const nominal = Number(t.nominal) || 0;
+        if (t.type === 'Pemasukan') totalPemasukan += nominal;
+        if (t.type === 'Pengeluaran') totalPengeluaran += nominal;
     });
 
     const saldo = totalPemasukan - totalPengeluaran;
@@ -331,14 +342,16 @@ function calculateSiswaKas(siswaId) {
     let totalDibayar = 0;
     appData.transaksi.forEach(t => {
         if (t.type === 'Pemasukan' && t.siswaId == siswaId) {
-            totalDibayar += Number(t.nominal);
+            // Konversi nominal ke Number sebelum dijumlahkan
+            totalDibayar += Number(t.nominal) || 0;
         }
     });
-    const totalTagihan = appData.settings.nominalKas;
+
+    const totalTagihan = Number(appData.settings.nominalKas) || 0;
     const tunggakan = Math.max(0, totalTagihan - totalDibayar);
     
     let status = 'Belum Bayar';
-    if (totalDibayar >= totalTagihan) {
+    if (totalDibayar >= totalTagihan && totalTagihan > 0) {
         status = 'Sudah Bayar';
     } else if (totalDibayar > 0) {
         status = 'Sebagian';
