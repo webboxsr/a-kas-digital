@@ -551,7 +551,7 @@ document.getElementById('form-pembayaran').addEventListener('submit', async func
         .insert([{
             type: 'Pemasukan',
             kategori: 'Pembayaran Kas',
-            siswa_id: siswa.id,
+            siswa_id: Number(siswa.id),
             sumber: siswa.fullname,
             nominal: nominal,
             tanggal: tanggal,
