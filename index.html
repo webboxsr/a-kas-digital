@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kas Kelas Digital</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+
+    <div id="auth-screen" class="auth-container">
+        <div class="auth-card">
+            <h2 id="auth-title">Buat Akun</h2>
+            <form id="auth-form">
+                <div class="form-group">
+                    <label>Nama Lengkap</label>
+                    <input type="text" id="auth-fullname" required>
+                </div>
+                <div class="form-group">
+                    <label>Nama Panggilan</label>
+                    <input type="text" id="auth-nickname" required>
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <div class="password-wrapper">
+                        <input type="password" id="auth-password" required>
+                        <button type="button" class="toggle-password" onclick="togglePasswordVisibility('auth-password', this)">Lihat</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Role</label>
+                    <select id="auth-role" onchange="handleRoleChange()">
+                        <option value="Siswa">Siswa</option>
+                        <option value="Admin">Admin</option>
+                    </select>
+                </div>
+                <div class="form-group" id="admin-position-group" style="display: none;">
+                    <label>Posisi Admin</label>
+                    <select id="auth-admin-position">
+                        <option value="Ketua Kelas">Ketua Kelas</option>
+                        <option value="Bendahara 1">Bendahara 1</option>
+                        <option value="Bendahara 2">Bendahara 2</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block" id="auth-submit-btn">Daftar</button>
+            </form>
+            <div class="auth-footer">
+                <p id="auth-switch-text">Sudah punya akun? <a href="#" onclick="switchAuthMode('login')">Masuk</a></p>
+            </div>
+        </div>
+    </div>
+
+    <div id="main-app" class="app-container" style="display: none;">
+        <aside class="sidebar">
+            <div class="brand">
+                <h3>Kas Kelas Digital</h3>
+            </div>
+            <nav class="nav-menu" id="nav-menu">
+            </nav>
+        </aside>
+
+        <main class="content-area">
+            <header class="top-header">
+                <div class="header-info">
+                    <span id="user-display-name"></span>
+                    <span id="user-display-role" class="badge"></span>
+                </div>
+                <div class="header-actions">
+                    <button class="btn btn-secondary btn-back" onclick="goBack()">Kembali</button>
+                </div>
+            </header>
+
+            <div class="main-content">
+                <section id="page-dashboard" class="page-section">
+                    <h2>Dashboard</h2>
+                    <div class="card-grid" id="dashboard-cards"></div>
+                    <div class="dashboard-details grid-2">
+                        <div class="card">
+                            <h3>Transaksi Terbaru</h3>
+                            <div id="dashboard-recent-transactions" class="table-responsive"></div>
+                        </div>
+                        <div class="card" id="dashboard-unpaid-card">
+                            <h3>Siswa Belum Bayar</h3>
+                            <div id="dashboard-unpaid-students" class="table-responsive"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="page-siswa" class="page-section" style="display: none;">
+                    <div class="section-header">
+                        <h2>Data Siswa</h2>
+                        <button class="btn btn-primary admin-only" onclick="openModal('modal-siswa')">Tambah Siswa</button>
+                    </div>
+                    <div class="filter-container">
+                        <input type="text" id="search-siswa" placeholder="Cari siswa..." oninput="renderSiswa()">
+                    </div>
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Absen</th>
+                                    <th>Nama Lengkap</th>
+                                    <th>Panggilan</th>
+                                    <th>Total Dibayar</th>
+                                    <th>Tunggakan</th>
+                                    <th>Status</th>
+                                    <th class="admin-only">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-siswa"></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section id="page-kas" class="page-section" style="display: none;">
+                    <div class="section-header">
+                        <h2>Kas Kelas</h2>
+                        <button class="btn btn-primary admin-only" onclick="openModal('modal-pembayaran')">Catat Pembayaran</button>
+                    </div>
+                    <div class="card-grid">
+                        <div class="card">
+                            <h4>Total Pemasukan Kas</h4>
+                            <p class="amount text-success" id="kas-total-pemasukan">Rp0</p>
+                        </div>
+                        <div class="card">
+                            <h4>Total Pengeluaran Kas</h4>
+                            <p class="amount text-danger" id="kas-total-pengeluaran">Rp0</p>
+                        </div>
+                        <div class="card">
+                            <h4>Saldo Kas</h4>
+                            <p class="amount text-primary" id="kas-saldo">Rp0</p>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="page-transaksi" class="page-section" style="display: none;">
+                    <div class="section-header">
+                        <h2>Transaksi</h2>
+                        <div class="admin-only">
+                            <button class="btn btn-primary" onclick="openModal('modal-pemasukan')">Tambah Pemasukan</button>
+                            <button class="btn btn-danger" onclick="openModal('modal-pengeluaran')">Tambah Pengeluaran</button>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Tanggal</th>
+                                    <th>Tipe</th>
+                                    <th>Kategori / Nama</th>
+                                    <th>Nominal</th>
+                                    <th>Keterangan</th>
+                                    <th>Bukti</th>
+                                    <th class="admin-only">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-transaksi"></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section id="page-tagihan" class="page-section" style="display: none;">
+                    <div class="section-header">
+                        <h2>Tagihan Siswa</h2>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Nama Siswa</th>
+                                    <th>Nominal Tagihan</th>
+                                    <th>Sudah Dibayar</th>
+                                    <th>Tunggakan</th>
+                                    <th>Status</th>
+                                    <th>Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-tagihan"></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section id="page-laporan" class="page-section" style="display: none;">
+                    <div class="section-header">
+                        <h2>Laporan Keuangan</h2>
+                        <div>
+                            <button class="btn btn-secondary" onclick="window.print()">Cetak</button>
+                            <button class="btn btn-primary" onclick="exportPDF()">Download PDF</button>
+                            <button class="btn btn-success" onclick="exportExcel()">Download Excel</button>
+                        </div>
+                    </div>
+                    <div class="card-grid">
+                        <div class="card">
+                            <h4>Total Pemasukan</h4>
+                            <p class="amount text-success" id="lap-pemasukan">Rp0</p>
+                        </div>
+                        <div class="card">
+                            <h4>Total Pengeluaran</h4>
+                            <p class="amount text-danger" id="lap-pengeluaran">Rp0</p>
+                        </div>
+                        <div class="card">
+                            <h4>Saldo Akhir</h4>
+                            <p class="amount text-primary" id="lap-saldo">Rp0</p>
+                        </div>
+                    </div>
+                    <h3>Rekapitulasi Transaksi</h3>
+                    <div class="table-responsive">
+                        <table class="data-table" id="table-laporan">
+                            <thead>
+                                <tr>
+                                    <th>Tanggal</th>
+                                    <th>Tipe</th>
+                                    <th>Keterangan</th>
+                                    <th>Nominal</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-laporan"></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section id="page-riwayat" class="page-section" style="display: none;">
+                    <div class="section-header">
+                        <h2>Riwayat Transaksi</h2>
+                    </div>
+                    <div class="filter-container grid-4">
+                        <input type="text" id="filter-riwayat-search" placeholder="Cari..." oninput="renderRiwayat()">
+                        <select id="filter-riwayat-type" onchange="renderRiwayat()">
+                            <option value="">Semua Tipe</option>
+                            <option value="Pemasukan">Pemasukan</option>
+                            <option value="Pengeluaran">Pengeluaran</option>
+                        </select>
+                        <input type="date" id="filter-riwayat-date" onchange="renderRiwayat()">
+                        <button class="btn btn-secondary" onclick="resetFilterRiwayat()">Reset Filter</button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Tanggal</th>
+                                    <th>Tipe</th>
+                                    <th>Keterangan</th>
+                                    <th>Nominal</th>
+                                    <th>Bukti</th>
+                                    <th class="admin-only">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbody-riwayat"></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section id="page-profil" class="page-section" style="display: none;">
+                    <div class="section-header">
+                        <h2>Profil Saya</h2>
+                    </div>
+                    <div class="card profile-card">
+                        <div class="avatar-container">
+                            <img id="profile-avatar" src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100' viewBox='0 0 24 24' fill='none' stroke='%23ccc' stroke-width='2'><path d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2'></path><circle cx='12' cy='7' r='4'></circle></svg>" alt="Profil">
+                            <input type="file" id="profile-photo-input" accept="image/*" onchange="uploadProfilePhoto(event)">
+                        </div>
+                        <form id="profile-form">
+                            <div class="form-group">
+                                <label>Nama Lengkap</label>
+                                <input type="text" id="profile-fullname" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Nama Panggilan</label>
+                                <input type="text" id="profile-nickname" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Password Baru</label>
+                                <div class="password-wrapper">
+                                    <input type="password" id="profile-password" placeholder="Isi untuk mengganti">
+                                    <button type="button" class="toggle-password" onclick="togglePasswordVisibility('profile-password', this)">Lihat</button>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Simpan Profil</button>
+                        </form>
+                    </div>
+                </section>
+
+                <section id="page-pengaturan" class="page-section" style="display: none;">
+                    <div class="section-header">
+                        <h2>Pengaturan</h2>
+                    </div>
+                    <div class="card">
+                        <h3>Tampilan</h3>
+                        <div class="form-group inline-group">
+                            <label>Mode Gelap</label>
+                            <input type="checkbox" id="theme-toggle" onchange="toggleTheme()">
+                        </div>
+                    </div>
+                    <div class="card admin-only">
+                        <h3>Pengaturan Kas Kelas</h3>
+                        <form id="setting-kas-form">
+                            <div class="form-group">
+                                <label>Nominal Kas Standar (Rp)</label>
+                                <input type="number" id="setting-kas-nominal" min="0" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Periode Tagihan</label>
+                                <select id="setting-kas-periode">
+                                    <option value="Harian">Harian</option>
+                                    <option value="Mingguan">Mingguan</option>
+                                    <option value="Bulanan">Bulanan</option>
+                                </select>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Simpan Pengaturan Kas</button>
+                        </form>
+                    </div>
+                    <div class="card">
+                        <h3>Akun</h3>
+                        <div class="btn-group">
+                            <button class="btn btn-warning" onclick="switchAccount()">Ganti Akun</button>
+                            <button class="btn btn-danger" onclick="logout()">Keluar Akun</button>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+
+        <nav class="bottom-nav" id="bottom-nav"></nav>
+    </div>
+
+    <div id="modal-siswa" class="modal">
+        <div class="modal-content">
+            <h3 id="modal-siswa-title">Tambah Siswa</h3>
+            <form id="form-siswa">
+                <input type="hidden" id="siswa-id">
+                <div class="form-group">
+                    <label>Nomor Absen</label>
+                    <input type="number" id="siswa-absen" min="1" required>
+                </div>
+                <div class="form-group">
+                    <label>Nama Lengkap</label>
+                    <input type="text" id="siswa-fullname" required>
+                </div>
+                <div class="form-group">
+                    <label>Nama Panggilan</label>
+                    <input type="text" id="siswa-nickname" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('modal-siswa')">Batal</button>
+                    <button type="submit" class="btn btn-primary">Simpan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="modal-pembayaran" class="modal">
+        <div class="modal-content">
+            <h3>Catat Pembayaran Kas</h3>
+            <form id="form-pembayaran">
+                <div class="form-group">
+                    <label>Pilih Siswa</label>
+                    <select id="pembayaran-siswa-id" required></select>
+                </div>
+                <div class="form-group">
+                    <label>Tanggal</label>
+                    <input type="date" id="pembayaran-tanggal" required>
+                </div>
+                <div class="form-group">
+                    <label>Nominal (Rp)</label>
+                    <input type="number" id="pembayaran-nominal" min="1" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('modal-pembayaran')">Batal</button>
+                    <button type="submit" class="btn btn-primary">Simpan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="modal-pemasukan" class="modal">
+        <div class="modal-content">
+            <h3>Tambah Pemasukan Lainnya</h3>
+            <form id="form-pemasukan">
+                <div class="form-group">
+                    <label>Sumber Pemasukan</label>
+                    <input type="text" id="pemasukan-sumber" required>
+                </div>
+                <div class="form-group">
+                    <label>Tanggal</label>
+                    <input type="date" id="pemasukan-tanggal" required>
+                </div>
+                <div class="form-group">
+                    <label>Nominal (Rp)</label>
+                    <input type="number" id="pemasukan-nominal" min="1" required>
+                </div>
+                <div class="form-group">
+                    <label>Keterangan</label>
+                    <input type="text" id="pemasukan-keterangan">
+                </div>
+                <div class="form-group">
+                    <label>Bukti Transaksi</label>
+                    <input type="file" id="pemasukan-bukti" accept="image/*">
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('modal-pemasukan')">Batal</button>
+                    <button type="submit" class="btn btn-primary">Simpan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="modal-pengeluaran" class="modal">
+        <div class="modal-content">
+            <h3>Tambah Pengeluaran</h3>
+            <form id="form-pengeluaran">
+                <div class="form-group">
+                    <label>Nama Pengeluaran</label>
+                    <input type="text" id="pengeluaran-nama" required>
+                </div>
+                <div class="form-group">
+                    <label>Tanggal</label>
+                    <input type="date" id="pengeluaran-tanggal" required>
+                </div>
+                <div class="form-group">
+                    <label>Nominal (Rp)</label>
+                    <input type="number" id="pengeluaran-nominal" min="1" required>
+                </div>
+                <div class="form-group">
+                    <label>Keterangan</label>
+                    <input type="text" id="pengeluaran-keterangan">
+                </div>
+                <div class="form-group">
+                    <label>Bukti Transaksi</label>
+                    <input type="file" id="pengeluaran-bukti" accept="image/*">
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal('modal-pengeluaran')">Batal</button>
+                    <button type="submit" class="btn btn-primary">Simpan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="modal-bukti" class="modal">
+        <div class="modal-content">
+            <h3>Bukti Transaksi</h3>
+            <div class="image-preview-container">
+                <img id="bukti-image-display" src="" alt="Bukti Transaksi">
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeModal('modal-bukti')">Tutup</button>
+            </div>
+        </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="script.js"></script>
+</body>
+</html>
